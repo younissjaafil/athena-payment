@@ -6,9 +6,8 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get('health')
-  getHealth(): { status: string; service: string; timestamp: string } {
+  getHealth(): { service: string; timestamp: string } {
     return {
-      status: 'Successful',
       service: 'Payment Microservice is Running',
       timestamp: new Date().toISOString(),
     };
