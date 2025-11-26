@@ -112,12 +112,7 @@ export class WhishPaymentGateway implements IPaymentGateway {
         );
       }
 
-      return new Balance(
-        data.data.balance,
-        0,
-        'LBP',
-        new Date(),
-      );
+      return new Balance(data.data.balance, 0, 'LBP', new Date());
     } catch (error) {
       this.logger.error('Failed to get balance', error);
       throw error;
