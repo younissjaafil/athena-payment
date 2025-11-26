@@ -1,5 +1,5 @@
 import { Balance } from '../entities/balance.entity';
-import { Currency, Payment } from '../entities/payment.entity';
+import { Currency } from '../entities/payment.entity';
 
 /**
  * Payment Gateway Interface - Defines the contract for payment providers
@@ -14,29 +14,38 @@ export interface IPaymentGateway {
   /**
    * Create a new payment link
    */
-  createPayment(request: CreatePaymentRequest): Promise<Payment>;
+  createPayment(request: CreatePaymentRequest): Promise<CreatePaymentResponse>;
 
   /**
-   * Get payment status by ID
+   * Get payment status by external ID
    */
-  getPaymentStatus(paymentId: string): Promise<Payment>;
-
-  /**
-   * Cancel a pending payment
-   */
-  cancelPayment(paymentId: string): Promise<boolean>;
+  getPaymentStatus(
+    externalId: number,
+    currency: Currency,
+  ): Promise<PaymentStatusResponse>;
 }
 
 export interface CreatePaymentRequest {
   amount: number;
   currency: Currency;
-  description?: string;
-  merchantReference?: string;
-  customerEmail?: string;
-  customerPhone?: string;
-  redirectUrl?: string;
-  webhookUrl?: string;
-  expiresIn?: number; // in minutes
+  invoice: string; // Description about the payment
+  externalId: number; // Unique ID from your system
+  successCallbackUrl: string;
+  failureCallbackUrl: string;
+  successRedirectUrl: string;
+  failureRedirectUrl: string;
+}
+
+export interface CreatePaymentResponse {
+  collectUrl: string;
+  externalId: number;
+}
+
+export interface PaymentStatusResponse {
+  collectStatus: 'success' | 'failed' | 'pending';
+  payerPhoneNumber: string;
+  externalId: number;
+  currency: Currency;
 }
 
 export const PAYMENT_GATEWAY = Symbol('IPaymentGateway');

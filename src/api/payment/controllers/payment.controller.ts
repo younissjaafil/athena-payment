@@ -3,16 +3,20 @@ import {
   Get,
   Post,
   Body,
-  Param,
+  Query,
   HttpCode,
   HttpStatus,
   UseFilters,
 } from '@nestjs/common';
 import { PaymentService } from '../../../application/payment/services/payment.service';
 import { CreatePaymentDto } from '../../../application/payment/dto/create-payment.dto';
-import { PaymentResponseDto } from '../../../application/payment/dto/payment-response.dto';
+import {
+  CreatePaymentResponseDto,
+  PaymentStatusResponseDto,
+} from '../../../application/payment/dto/payment-response.dto';
 import { BalanceResponseDto } from '../../../application/payment/dto/balance-response.dto';
 import { PaymentExceptionFilter } from '../filters/payment-exception.filter';
+import { Currency } from '../../../domain/payment/entities/payment.entity';
 
 /**
  * Payment Controller - API layer
@@ -40,30 +44,19 @@ export class PaymentController {
   @HttpCode(HttpStatus.CREATED)
   async createPayment(
     @Body() createPaymentDto: CreatePaymentDto,
-  ): Promise<PaymentResponseDto> {
+  ): Promise<CreatePaymentResponseDto> {
     return this.paymentService.createPayment(createPaymentDto);
   }
 
   /**
    * Get payment status
-   * GET /payments/:id/status
+   * POST /payments/status
    */
-  @Get(':id/status')
-  async getPaymentStatus(
-    @Param('id') paymentId: string,
-  ): Promise<PaymentResponseDto> {
-    return this.paymentService.getPaymentStatus(paymentId);
-  }
-
-  /**
-   * Cancel a payment
-   * POST /payments/:id/cancel
-   */
-  @Post(':id/cancel')
+  @Post('status')
   @HttpCode(HttpStatus.OK)
-  async cancelPayment(
-    @Param('id') paymentId: string,
-  ): Promise<{ success: boolean }> {
-    return this.paymentService.cancelPayment(paymentId);
+  async getPaymentStatus(
+    @Body() body: { externalId: number; currency: Currency },
+  ): Promise<PaymentStatusResponseDto> {
+    return this.paymentService.getPaymentStatus(body.externalId, body.currency);
   }
 }

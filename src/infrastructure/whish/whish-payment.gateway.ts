@@ -4,19 +4,19 @@ import axios, { AxiosInstance } from 'axios';
 import {
   IPaymentGateway,
   CreatePaymentRequest,
+  CreatePaymentResponse,
+  PaymentStatusResponse,
 } from '../../domain/payment/interfaces/payment-gateway.interface';
-import {
-  Payment,
-  PaymentStatus,
-  Currency,
-} from '../../domain/payment/entities/payment.entity';
+import { Currency } from '../../domain/payment/entities/payment.entity';
 import { Balance } from '../../domain/payment/entities/balance.entity';
 import { WhishApiException } from './exceptions/whish-api.exception';
 import {
-  WhishBalanceResponse,
-  WhishPaymentResponse,
-  WhishStatusResponse,
+  WhishApiResponse,
+  WhishBalanceData,
+  WhishCreatePaymentData,
+  WhishStatusData,
   WhishCreatePaymentRequest,
+  WhishGetStatusRequest,
 } from './types/whish.types';
 
 /**
@@ -34,7 +34,7 @@ export class WhishPaymentGateway implements IPaymentGateway {
   constructor(private readonly configService: ConfigService) {
     const baseUrl = this.configService.get<string>(
       'PAYMENT_SERVICE_URL',
-      'https://api.whish.money',
+      'https://whish.money',
     );
     this.channel = this.configService.get<string>('WHISH_CHANNEL', '');
     this.secret = this.configService.get<string>('WHISH_SECRET', '');
@@ -62,7 +62,7 @@ export class WhishPaymentGateway implements IPaymentGateway {
       },
       (error) => {
         this.logger.error('Request error', error);
-        return Promise.reject(error);
+        throw error;
       },
     );
 
@@ -78,33 +78,45 @@ export class WhishPaymentGateway implements IPaymentGateway {
           'Response error',
           error.response?.data || error.message,
         );
-        return Promise.reject(WhishApiException.fromAxiosError(error));
+        throw WhishApiException.fromAxiosError(error);
       },
     );
   }
 
   private getAuthHeaders(): Record<string, string> {
     return {
-      'X-Channel': this.channel,
-      'X-Secret': this.secret,
+      'Content-Type': 'application/json',
+      channel: this.channel,
+      secret: this.secret,
+      websiteurl: this.websiteUrl,
     };
   }
 
+  /**
+   * Get Balance - GET /itel-service/api/payment/account/balance
+   */
   async getBalance(): Promise<Balance> {
     try {
-      const response = await this.httpClient.get<WhishBalanceResponse>(
-        '/api/balance',
-        {
-          headers: this.getAuthHeaders(),
-        },
-      );
+      const response = await this.httpClient.get<
+        WhishApiResponse<WhishBalanceData>
+      >('/itel-service/api/payment/account/balance', {
+        headers: this.getAuthHeaders(),
+      });
 
       const data = response.data;
+      if (!data.status) {
+        throw new WhishApiException(
+          data.dialog || 'Failed to get balance',
+          400,
+          data.code || undefined,
+        );
+      }
+
       return new Balance(
-        data.balance,
-        data.pending,
-        data.currency,
-        new Date(data.timestamp),
+        data.data.balance,
+        0,
+        'LBP',
+        new Date(),
       );
     } catch (error) {
       this.logger.error('Failed to get balance', error);
@@ -112,92 +124,92 @@ export class WhishPaymentGateway implements IPaymentGateway {
     }
   }
 
-  async createPayment(request: CreatePaymentRequest): Promise<Payment> {
+  /**
+   * Create Payment - POST /itel-service/api/payment/whish
+   */
+  async createPayment(
+    request: CreatePaymentRequest,
+  ): Promise<CreatePaymentResponse> {
     try {
       const payload: WhishCreatePaymentRequest = {
         amount: request.amount,
         currency: request.currency,
-        description: request.description,
-        merchant_reference: request.merchantReference,
-        customer_email: request.customerEmail,
-        customer_phone: request.customerPhone,
-        redirect_url:
-          request.redirectUrl || `https://${this.websiteUrl}/payment/callback`,
-        webhook_url: request.webhookUrl,
-        expires_in: request.expiresIn,
+        invoice: request.invoice,
+        externalId: request.externalId,
+        successCallbackUrl: request.successCallbackUrl,
+        failureCallbackUrl: request.failureCallbackUrl,
+        successRedirectUrl: request.successRedirectUrl,
+        failureRedirectUrl: request.failureRedirectUrl,
       };
 
-      const response = await this.httpClient.post<WhishPaymentResponse>(
-        '/api/payments',
-        payload,
-        {
-          headers: this.getAuthHeaders(),
-        },
-      );
+      const response = await this.httpClient.post<
+        WhishApiResponse<WhishCreatePaymentData>
+      >('/itel-service/api/payment/whish', payload, {
+        headers: this.getAuthHeaders(),
+      });
 
-      return this.mapToPayment(response.data);
+      const data = response.data;
+      if (!data.status) {
+        throw new WhishApiException(
+          data.dialog || 'Failed to create payment',
+          400,
+          data.code || undefined,
+        );
+      }
+
+      return {
+        collectUrl: data.data.collectUrl,
+        externalId: request.externalId,
+      };
     } catch (error) {
       this.logger.error('Failed to create payment', error);
       throw error;
     }
   }
 
-  async getPaymentStatus(paymentId: string): Promise<Payment> {
+  /**
+   * Get Payment Status - POST /itel-service/api/payment/collect/status
+   */
+  async getPaymentStatus(
+    externalId: number,
+    currency: Currency,
+  ): Promise<PaymentStatusResponse> {
     try {
-      const response = await this.httpClient.get<WhishStatusResponse>(
-        `/api/payments/${paymentId}/status`,
-        {
-          headers: this.getAuthHeaders(),
-        },
-      );
+      const payload: WhishGetStatusRequest = {
+        currency: currency,
+        externalId: externalId,
+      };
 
-      return this.mapToPayment(response.data);
+      const response = await this.httpClient.post<
+        WhishApiResponse<WhishStatusData>
+      >('/itel-service/api/payment/collect/status', payload, {
+        headers: this.getAuthHeaders(),
+      });
+
+      const data = response.data;
+      if (!data.status) {
+        throw new WhishApiException(
+          data.dialog || 'Failed to get payment status',
+          400,
+          data.code || undefined,
+        );
+      }
+
+      return {
+        collectStatus: data.data.collectStatus as
+          | 'success'
+          | 'failed'
+          | 'pending',
+        payerPhoneNumber: data.data.payerPhoneNumber,
+        externalId: externalId,
+        currency: currency,
+      };
     } catch (error) {
-      this.logger.error(`Failed to get payment status for ${paymentId}`, error);
+      this.logger.error(
+        `Failed to get payment status for externalId: ${externalId}`,
+        error,
+      );
       throw error;
     }
-  }
-
-  async cancelPayment(paymentId: string): Promise<boolean> {
-    try {
-      await this.httpClient.post(
-        `/api/payments/${paymentId}/cancel`,
-        {},
-        {
-          headers: this.getAuthHeaders(),
-        },
-      );
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to cancel payment ${paymentId}`, error);
-      throw error;
-    }
-  }
-
-  private mapToPayment(
-    data: WhishPaymentResponse | WhishStatusResponse,
-  ): Payment {
-    return new Payment(
-      data.id,
-      data.amount,
-      data.currency as Currency,
-      this.mapStatus(data.status),
-      data.payment_url,
-      data.merchant_reference,
-      new Date(data.created_at),
-      data.expires_at ? new Date(data.expires_at) : undefined,
-    );
-  }
-
-  private mapStatus(status: string): PaymentStatus {
-    const statusMap: Record<string, PaymentStatus> = {
-      pending: PaymentStatus.PENDING,
-      completed: PaymentStatus.COMPLETED,
-      paid: PaymentStatus.COMPLETED,
-      failed: PaymentStatus.FAILED,
-      cancelled: PaymentStatus.CANCELLED,
-      expired: PaymentStatus.EXPIRED,
-    };
-    return statusMap[status.toLowerCase()] || PaymentStatus.PENDING;
   }
 }

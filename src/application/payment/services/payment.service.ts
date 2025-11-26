@@ -1,11 +1,12 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { IPaymentGateway } from '../../../domain/payment/interfaces/payment-gateway.interface';
-import {
-  PAYMENT_GATEWAY,
-  CreatePaymentRequest,
-} from '../../../domain/payment/interfaces/payment-gateway.interface';
+import { PAYMENT_GATEWAY } from '../../../domain/payment/interfaces/payment-gateway.interface';
+import { Currency } from '../../../domain/payment/entities/payment.entity';
 import { CreatePaymentDto } from '../dto/create-payment.dto';
-import { PaymentResponseDto } from '../dto/payment-response.dto';
+import {
+  CreatePaymentResponseDto,
+  PaymentStatusResponseDto,
+} from '../dto/payment-response.dto';
 import { BalanceResponseDto } from '../dto/balance-response.dto';
 
 /**
@@ -39,42 +40,34 @@ export class PaymentService {
   /**
    * Create a new payment
    */
-  async createPayment(dto: CreatePaymentDto): Promise<PaymentResponseDto> {
+  async createPayment(
+    dto: CreatePaymentDto,
+  ): Promise<CreatePaymentResponseDto> {
     this.logger.log(`Creating payment: ${dto.amount} ${dto.currency}`);
 
-    const request: CreatePaymentRequest = {
+    const result = await this.paymentGateway.createPayment({
       amount: dto.amount,
       currency: dto.currency,
-      description: dto.description,
-      merchantReference: dto.merchantReference,
-      customerEmail: dto.customerEmail,
-      customerPhone: dto.customerPhone,
-      redirectUrl: dto.redirectUrl,
-      webhookUrl: dto.webhookUrl,
-      expiresIn: dto.expiresIn,
-    };
+      invoice: dto.invoice,
+      externalId: dto.externalId,
+      successCallbackUrl: dto.successCallbackUrl,
+      failureCallbackUrl: dto.failureCallbackUrl,
+      successRedirectUrl: dto.successRedirectUrl,
+      failureRedirectUrl: dto.failureRedirectUrl,
+    });
 
-    const payment = await this.paymentGateway.createPayment(request);
-
-    this.logger.log(`Payment created: ${payment.id}`);
-    return PaymentResponseDto.fromEntity(payment);
+    this.logger.log(`Payment created with URL: ${result.collectUrl}`);
+    return result;
   }
 
   /**
-   * Get payment status by ID
+   * Get payment status by external ID
    */
-  async getPaymentStatus(paymentId: string): Promise<PaymentResponseDto> {
-    this.logger.log(`Fetching payment status: ${paymentId}`);
-    const payment = await this.paymentGateway.getPaymentStatus(paymentId);
-    return PaymentResponseDto.fromEntity(payment);
-  }
-
-  /**
-   * Cancel a pending payment
-   */
-  async cancelPayment(paymentId: string): Promise<{ success: boolean }> {
-    this.logger.log(`Cancelling payment: ${paymentId}`);
-    const success = await this.paymentGateway.cancelPayment(paymentId);
-    return { success };
+  async getPaymentStatus(
+    externalId: number,
+    currency: Currency,
+  ): Promise<PaymentStatusResponseDto> {
+    this.logger.log(`Fetching payment status for externalId: ${externalId}`);
+    return this.paymentGateway.getPaymentStatus(externalId, currency);
   }
 }

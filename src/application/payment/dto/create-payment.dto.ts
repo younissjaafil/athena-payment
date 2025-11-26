@@ -2,9 +2,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsEnum,
-  IsOptional,
   IsString,
-  IsEmail,
   IsUrl,
   Min,
 } from 'class-validator';
@@ -24,31 +22,26 @@ export class CreatePaymentDto {
   currency: Currency;
 
   @IsString()
-  @IsOptional()
-  description?: string;
-
-  @IsString()
-  @IsOptional()
-  merchantReference?: string;
-
-  @IsEmail()
-  @IsOptional()
-  customerEmail?: string;
-
-  @IsString()
-  @IsOptional()
-  customerPhone?: string;
-
-  @IsUrl()
-  @IsOptional()
-  redirectUrl?: string;
-
-  @IsUrl()
-  @IsOptional()
-  webhookUrl?: string;
+  @IsNotEmpty()
+  invoice: string; // Description about the payment
 
   @IsNumber()
-  @IsOptional()
-  @Min(1)
-  expiresIn?: number;
+  @IsNotEmpty()
+  externalId: number; // Unique ID from your system
+
+  @IsUrl()
+  @IsNotEmpty()
+  successCallbackUrl: string;
+
+  @IsUrl()
+  @IsNotEmpty()
+  failureCallbackUrl: string;
+
+  @IsUrl()
+  @IsNotEmpty()
+  successRedirectUrl: string;
+
+  @IsUrl()
+  @IsNotEmpty()
+  failureRedirectUrl: string;
 }
