@@ -8,7 +8,7 @@ export class AppController {
   @Get('health')
   getHealth(): { service: string; timestamp: string } {
     return {
-      service: 'Payment Microservice is Running',
+      service: 'Payment Microservice is Running Successfully',
       timestamp: new Date().toISOString(),
     };
   }
